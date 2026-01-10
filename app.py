@@ -1,26 +1,25 @@
-import os
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-@app.get("/")
+@app.route("/")
 def home():
     return "OK - Alexa IA Bridge funcionando"
 
-@app.post("/alexa")
+@app.route("/alexa", methods=["POST"])
 def alexa():
-    response = {
+    data = request.json  # Alexa manda JSON por POST
+
+    return jsonify({
         "version": "1.0",
         "response": {
             "outputSpeech": {
                 "type": "PlainText",
-                "text": "Hola Robert. Ya estoy conectada a tu servidor y lista para hablar con la IA."
+                "text": "Hola Robert, el puente está funcionando correctamente."
             },
             "shouldEndSession": True
         }
-    }
-    return jsonify(response)
+    })
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=10000)
