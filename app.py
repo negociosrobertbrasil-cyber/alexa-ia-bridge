@@ -26,5 +26,3 @@ def alexa_webhook():
         }
     }
     return jsonify(response)
-10000)
-    
