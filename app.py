@@ -1,26 +1,30 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 
 app = Flask(__name__)
 
-@app.route("/")
+# Health general
+@app.get("/")
 def home():
-    return "OK - Alexa IA Bridge funcionando"
+    return "OK - Alexa IA Bridge funcionando", 200
 
-@app.route("/alexa", methods=["POST"])
-def alexa():
-    data = request.json  # Alexa manda JSON por POST
+# Endpoint que Alexa llama
+@app.route("/alexa", methods=["POST", "GET", "HEAD"])
+def alexa_webhook():
+    # Alexa/validadores a veces mandan HEAD/GET para verificar disponibilidad
+    if request.method in ("GET", "HEAD"):
+        return ("OK", 200)
 
-    return jsonify({
+    # POST real de Alexa
+    data = request.get_json(silent=True) or {}
+
+    # Respuesta mínima válida para Alexa
+    response = {
         "version": "1.0",
         "response": {
-            "outputSpeech": {
-                "type": "PlainText",
-                "text": "Hola Robert, el puente está funcionando correctamente."
-            },
+            "outputSpeech": {"type": "PlainText", "text": "Hola Robert, ya conecté con tu skill."},
             "shouldEndSession": True
         }
-    })
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    }
+    return jsonify(response)
+10000)
     
