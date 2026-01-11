@@ -1,7 +1,11 @@
 from flask import Flask, request, jsonify
 import os
+import logging
 
 app = Flask(__name__)
+
+# Logging simple (Render muestra esto en Logs)
+logging.basicConfig(level=logging.INFO)
 
 
 @app.get("/")
@@ -9,111 +13,108 @@ def home():
     return "OK - Alexa IA Bridge funcionando", 200
 
 
-def alexa_response(text: str, end_session: bool = False, reprompt: str | None = None):
-    """Construye una respuesta Alexa (ASK) estándar."""
+def alexa_response(text, end_session=False, reprompt=None):
+    """
+    Construye una respuesta válida para Alexa Skills Kit.
+    """
     r = {
         "version": "1.0",
+        "sessionAttributes": {},  # ✅ recomendado para evitar rarezas en sesiones
         "response": {
             "outputSpeech": {"type": "PlainText", "text": text},
-            "shouldEndSession": end_session,
-        },
+            "shouldEndSession": end_session
+        }
     }
+
     if reprompt:
         r["response"]["reprompt"] = {
             "outputSpeech": {"type": "PlainText", "text": reprompt}
         }
+
     return r
-
-
-def get_slot_value(intent: dict, slot_names: list[str]) -> str:
-    """Extrae el value de un slot (prioridad por orden), si existe."""
-    slots = intent.get("slots") or {}
-    for name in slot_names:
-        s = slots.get(name) or {}
-        val = s.get("value")
-        if val and isinstance(val, str) and val.strip():
-            return val.strip()
-    return ""
 
 
 @app.route("/alexa", methods=["POST", "GET", "HEAD"])
 def alexa_webhook():
-    # Para checks de endpoint (algunos servicios hacen GET/HEAD)
+    # Health checks rápidos
     if request.method in ("GET", "HEAD"):
         return "OK", 200
 
-    # JSON de Alexa
     data = request.get_json(silent=True) or {}
     req = data.get("request", {}) or {}
     rtype = req.get("type", "")
 
-    # Debug mínimo (aparece en logs de Render)
-    try:
-        print("=== INCOMING REQUEST TYPE:", rtype)
-        print("Intent name:", (req.get("intent") or {}).get("name"))
-    except Exception:
-        pass
+    logging.info("Alexa request type: %s", rtype)
 
-    # 1) Cuando abre la skill
+    # 1) Cuando abrís la skill ("abre asistente ia")
     if rtype == "LaunchRequest":
         resp = alexa_response(
             "Hola Robert. Decime una frase empezando con: pregunta. "
             "Por ejemplo: pregunta cuánto es dos más dos.",
             end_session=False,
-            reprompt="Decí: pregunta... y tu consulta.",
+            reprompt="Decí: pregunta... y luego tu consulta."
         )
         return jsonify(resp), 200
 
-    # 2) IntentRequest (intents custom)
+    # 2) Cuando Alexa detecta un Intent
     if rtype == "IntentRequest":
-        intent = req.get("intent", {}) or {}
+        intent = (req.get("intent", {}) or {})
         name = intent.get("name", "")
+        logging.info("Intent name: %s", name)
 
-        # Tu intent principal
-        if name == "PreguntaIntent":
-            # IMPORTANTE: tu slot en el modelo se llama "consulta"
-            # Igual dejamos fallback por si un día lo renombrás
-            texto = get_slot_value(intent, ["consulta", "texto", "query", "pregunta"])
-
-            if not texto:
-                resp = alexa_response(
-                    "No capturé tu consulta. Probá diciendo: pregunta seguida de tu consulta.",
-                    end_session=False,
-                    reprompt="Decí: pregunta... y tu consulta.",
-                )
-                return jsonify(resp), 200
-
-            # Respuesta “bridge” (confirmación)
-            resp = alexa_response(
-                f"Perfecto. Capturé: {texto}.",
-                end_session=False,
-                reprompt="Decí otra pregunta.",
-            )
-            return jsonify(resp), 200
-
-        # Built-ins comunes: cancelar / stop
+        # Stop / Cancel
         if name in ("AMAZON.StopIntent", "AMAZON.CancelIntent"):
             return jsonify(alexa_response("Listo, cierro.", end_session=True)), 200
 
-        # Cualquier otro intent
+        # Fallback (cuando no matchea bien)
+        if name == "AMAZON.FallbackIntent":
+            return jsonify(
+                alexa_response(
+                    "No te entendí. Decí: pregunta... y luego tu consulta.",
+                    end_session=False,
+                    reprompt="Decí: pregunta... y luego tu consulta."
+                )
+            ), 200
+
+        # Tu intent custom
+        if name == "PreguntaIntent":
+            slots = (intent.get("slots", {}) or {})
+            # ✅ tu slot se llama "consulta"
+            texto = ((slots.get("consulta", {}) or {}).get("value", "") or "").strip()
+
+            logging.info("Slot consulta: %s", texto)
+
+            if not texto:
+                return jsonify(
+                    alexa_response(
+                        "No capté la consulta. Probá diciendo: pregunta... y luego tu consulta.",
+                        end_session=False,
+                        reprompt="Decí: pregunta... y luego tu consulta."
+                    )
+                ), 200
+
+            # Respuesta simple (fase 1). Después lo conectamos a IA real.
+            return jsonify(
+                alexa_response(
+                    f"Perfecto. Capté: {texto}. Cuando quieras, hago que la IA te responda eso.",
+                    end_session=False,
+                    reprompt="Decí otra: pregunta... lo que quieras."
+                )
+            ), 200
+
+        # Intent desconocido
         return jsonify(
             alexa_response(
-                "Entendí la intención, pero no la tengo configurada todavía.",
+                "Estoy viva, pero no entendí ese intent. Decí: pregunta... y luego tu consulta.",
                 end_session=False,
-                reprompt="Decí: pregunta... y tu consulta.",
+                reprompt="Decí: pregunta... y luego tu consulta."
             )
         ), 200
 
-    # 3) Fallback por si llega otra cosa
-    return jsonify(
-        alexa_response(
-            "Estoy viva, pero no entendí. Decí: pregunta... y tu consulta.",
-            end_session=False,
-            reprompt="Decí: pregunta... y tu consulta.",
-        )
-    ), 200
+    # 3) Otros tipos (SessionEndedRequest, etc.)
+    return jsonify(alexa_response("Ok.", end_session=True)), 200
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "10000"))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
