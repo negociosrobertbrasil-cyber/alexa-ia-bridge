@@ -283,9 +283,3 @@ def alexa_webhook():
         log.exception("Webhook ERROR in %.1fms: %s", dt, str(e))
         return jsonify(alexa_response("No pude obtener respuesta de Gemini. Revisá logs del servidor.",
                                       end_session=False, reprompt="Probá otra vez.")), 200
-
-
-if __name__ == "__main__":
-    # Render usa PORT
-    port = int(os.getenv("PORT", "10000"))
-    app.run(host="0.0.0.0", port=port)
