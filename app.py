@@ -23,7 +23,7 @@ app = Flask(__name__)
 # Config
 # ----------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest").strip()
 
 MAX_ALEXA_CHARS = int(os.getenv("MAX_ALEXA_CHARS", "800"))
 
